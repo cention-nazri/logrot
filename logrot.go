@@ -124,6 +124,9 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 	defer func() {
 		wc.writeErr = err
 	}()
+	if wc.closed {
+		return 0, errors.New("logrot: WriterCloser is closed")
+	}
 	br := 0 // bytes read from p
 	bw := 0 // bytes written
 	r := bytes.NewBuffer(p)
