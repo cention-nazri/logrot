@@ -129,19 +129,18 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 	}
 	br := 0 // bytes read from p
 	bw := 0 // bytes written
-	r := bytes.NewBuffer(p)
 	for br < len(p) {
 		bs := br
-		var s []byte
-		var n int
 		for wc.lines < wc.maxLines {
-			s, err = r.ReadBytes('\n')
-			br += len(s)
-			if err == io.EOF {
+			i := bytes.IndexByte(p[br:], '\n')
+			if i == -1 {
+				br += len(p[br:])
 				break
 			}
+			br += i + 1
 			wc.lines++
 		}
+		var n int
 		n, err = wc.file.Write(p[bs:br])
 		bw += n
 		if err != nil {
