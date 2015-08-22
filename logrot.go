@@ -39,7 +39,7 @@ type writeCloser struct {
 	path     string
 	maxLines int
 	maxFiles int
-	w        *os.File
+	file     *os.File
 	lines    int
 	closed   bool
 	writeErr error
@@ -60,7 +60,7 @@ func (wc *writeCloser) rotate() error {
 			return err
 		}
 	}
-	err = wc.w.Close()
+	err = wc.file.Close()
 	if err != nil {
 		return err
 	}
@@ -103,12 +103,12 @@ func (wc *writeCloser) rotate() error {
 		return err
 	}
 	wc.lines = 0
-	w, err = os.OpenFile(
+	file, err := os.OpenFile(
 		wc.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return err
 	}
-	wc.w = w
+	wc.file = file
 	return nil
 }
 
@@ -142,7 +142,7 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 			}
 			wc.lines++
 		}
-		n, err = wc.w.Write(p[bs:br])
+		n, err = wc.file.Write(p[bs:br])
 		bw += n
 		if err != nil {
 			return bw, err
@@ -161,7 +161,7 @@ func (wc *writeCloser) Close() error {
 	wc.mutex.Lock()
 	defer wc.mutex.Unlock()
 	if !wc.closed {
-		err := wc.w.Close()
+		err := wc.file.Close()
 		if err != nil {
 			return err
 		}
@@ -216,7 +216,7 @@ func Open(path string, maxLines int, maxFiles int) (io.WriteCloser, error) {
 			return nil, err
 		}
 	}
-	w, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+	file, err = os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func Open(path string, maxLines int, maxFiles int) (io.WriteCloser, error) {
 		path:     path,
 		maxLines: maxLines,
 		maxFiles: maxFiles,
-		w:        w,
+		file:     file,
 		lines:    lines,
 	}, nil
 }
