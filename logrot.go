@@ -179,9 +179,9 @@ func (wc *writeCloser) Close() error {
 //
 // Let N = maxFiles-1. Firstly, the file <path>.<N>.gz is deleted if
 // it exists. Then, if N > 0, for n from N-1 down to 1 the file
-// <path>.<n>.gz is renamed to <path>.<n+1>.gz if <path>.<n>.gz
-// exists. Next, <path> is closed, gzipped and renamed to <path>.1.gz
-// . Lastly, <path> is opened again as a new file and writing
+// <path>.<n>.gz is renamed to <path>.<n+1>.gz if it exists. Next,
+// <path> is gzipped and saved to the file <path>.1.gz . Lastly,
+// <path> is deleted and then opened again as a new file and writing
 // continues.
 //
 // It is safe to call Write/Close from multiple goroutines.
