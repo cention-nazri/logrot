@@ -19,7 +19,9 @@
    along with Logrot.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Package logrot implements simple log rotation with compression.
+// Package logrot implements a file writer with log rotation and gzip
+// compression. It provides an io.WriteCloser which, when written to,
+// takes care of rotation and compression as needed.
 //
 // Note: The API is presently experimental and may change.
 package logrot // import "xi2.org/x/logrot"
