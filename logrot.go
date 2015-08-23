@@ -27,7 +27,6 @@
 package logrot // import "xi2.org/x/logrot"
 
 import (
-	"bufio"
 	"bytes"
 	"compress/gzip"
 	"errors"
@@ -38,18 +37,22 @@ import (
 )
 
 type writeCloser struct {
-	path     string
-	maxLines int
-	maxFiles int
-	file     *os.File
-	lines    int
-	closed   bool
-	writeErr error
-	mutex    sync.Mutex
+	path        string
+	perm        os.FileMode
+	maxSize     int64
+	maxFiles    int
+	file        *os.File
+	size        int64
+	lastNewline int64
+	closed      bool
+	writeErr    error
+	mutex       sync.Mutex
 }
 
-// rotate performs the rotation as described in the comment for Open.
+// rotate performs the rotation as described in the comment for
+// Open. It assumes file contains a newline.
 func (wc *writeCloser) rotate() error {
+	// move each gz file up one number
 	err := os.Remove(fmt.Sprintf("%s.%d.gz", wc.path, wc.maxFiles-1))
 	if err != nil && !os.IsNotExist(err) {
 		return err
@@ -62,55 +65,55 @@ func (wc *writeCloser) rotate() error {
 			return err
 		}
 	}
-	err = wc.file.Close()
-	if err != nil {
-		return err
-	}
-	r, err := os.Open(wc.path)
-	if err != nil {
-		return err
-	}
+	// copy file contents up to last newline to <path>.1.gz
 	w, err := os.OpenFile(
-		fmt.Sprintf("%s.1.gz", wc.path),
-		os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+		fmt.Sprintf("%s.1.gz", wc.path), os.O_WRONLY|os.O_CREATE, wc.perm)
 	if err != nil {
-		_ = r.Close()
 		return err
 	}
 	gw := gzip.NewWriter(w)
-	_, err = io.Copy(gw, r)
-	if err != nil {
-		_ = gw.Close()
-		_ = w.Close()
-		_ = r.Close()
+	err = func() error {
+		// wrap in function literal to ensure gw and w are closed and
+		// flushed before next step
+		defer func() {
+			e := gw.Close()
+			if e != nil {
+				err = e
+			}
+			e = w.Close()
+			if e != nil {
+				err = e
+			}
+		}()
+		_, err = wc.file.Seek(0, 0)
+		if err != nil {
+			return err
+		}
+		_, err = io.CopyN(gw, wc.file, wc.lastNewline+1)
 		return err
-	}
-	err = gw.Close()
-	if err != nil {
-		_ = w.Close()
-		_ = r.Close()
-		return err
-	}
-	err = w.Close()
-	if err != nil {
-		_ = r.Close()
-		return err
-	}
-	err = r.Close()
-	if err != nil {
-		return err
-	}
-	err = os.Remove(wc.path)
+	}()
 	if err != nil {
 		return err
 	}
-	wc.lines = 0
-	file, err := os.OpenFile(
-		wc.path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+	// copy contents beyond last newline to beginning of file
+	sr := io.NewSectionReader(
+		wc.file, wc.lastNewline+1, wc.size-wc.lastNewline-1)
+	_, err = wc.file.Seek(0, 0)
 	if err != nil {
 		return err
 	}
-	wc.file = file
+	_, err = io.Copy(wc.file, sr)
+	if err != nil {
+		return err
+	}
+	// truncate file
+	err = wc.file.Truncate(wc.size - wc.lastNewline - 1)
+	if err != nil {
+		return err
+	}
+	// adjust recorded size
+	wc.size = wc.size - wc.lastNewline - 1
+	wc.lastNewline = -1
 	return nil
 }
 
@@ -118,37 +121,61 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 	wc.mutex.Lock()
 	defer wc.mutex.Unlock()
 	if wc.writeErr != nil {
-		// once Write returns an error, any subsequent calls will
-		// return the same error. To continue writing one must create
-		// a new WriteCloser using Open.
-		return 0, wc.writeErr
+		// If Write returns an error once, any subsequent calls
+		// fail. To continue writing one must create a new WriteCloser
+		// using Open.
+		return 0, fmt.Errorf(
+			"logrot: Write cannot complete due to previous error: %v",
+			wc.writeErr)
 	}
 	defer func() {
+		// save return value on exit
 		wc.writeErr = err
 	}()
 	if wc.closed {
 		return 0, errors.New("logrot: WriteCloser is closed")
 	}
-	br := 0 // bytes read from p
-	bw := 0 // bytes written
-	for br < len(p) {
-		bs := br
-		for wc.lines < wc.maxLines {
+	var bw int = 0 // total bytes written
+	var br int = 0 // bytes read from p in each loop iteration
+	for ; len(p) > 0; p, br = p[br:], 0 {
+		// advance br a line at a time until either end of buffer, a newline
+		// is reached or br+wc.size advances past wc.maxSize
+		for {
 			i := bytes.IndexByte(p[br:], '\n')
 			if i == -1 {
 				br += len(p[br:])
 				break
 			}
+			lnl := wc.size + int64(br+i)
+			if lnl < wc.maxSize || wc.lastNewline == -1 {
+				// record newline if before maxSize or first newline found
+				wc.lastNewline = lnl
+			}
 			br += i + 1
-			wc.lines++
+			if wc.size+int64(br) > wc.maxSize {
+				break
+			}
+		}
+		rotate := false
+		if wc.size+int64(br) > wc.maxSize && wc.lastNewline != -1 {
+			// maxSize exceeded and file contains a newline. Only
+			// write data up to max(maxSize,lastNewline+1). Schedule a
+			// rotate following the write.
+			max := wc.maxSize
+			if wc.lastNewline+1 > max {
+				max = wc.lastNewline + 1
+			}
+			br = int(max - wc.size)
+			rotate = true
 		}
 		var n int
-		n, err = wc.file.Write(p[bs:br])
+		n, err = wc.file.WriteAt(p[:br], wc.size)
 		bw += n
+		wc.size += int64(n)
 		if err != nil {
 			return bw, err
 		}
-		if wc.lines >= wc.maxLines {
+		if rotate {
 			err = wc.rotate()
 			if err != nil {
 				return bw, err
@@ -172,60 +199,76 @@ func (wc *writeCloser) Close() error {
 }
 
 // Open opens the file at path for writing in append mode. If it does
-// not exist it is created with permissions of 0600.
+// not exist it is created with permissions of perm.
 //
-// The returned WriteCloser keeps track of the number of lines in the
-// file. When that number becomes greater than or equal to maxLines a
-// rotation occurs. A rotation is the following procedure:
+// The returned WriteCloser keeps track of the size of the file and
+// the position of the most recent newline. If during a call to Write
+// the next byte written would cause the file size to exceed maxSize
+// bytes then a rotation occurs and writing continues following the
+// rotation. A rotation is the following procedure:
 //
-// Let N = maxFiles-1. Firstly, the file <path>.<N>.gz is deleted if
-// it exists. Then, if N > 0, for n from N-1 down to 1 the file
-// <path>.<n>.gz is renamed to <path>.<n+1>.gz if it exists. Next,
-// <path> is gzipped and saved to the file <path>.1.gz . Lastly,
-// <path> is deleted and then opened again as a new file and writing
-// continues.
+// If the file <path> contains no newlines then the rotation is a
+// noop. Otherwise let N = maxFiles-1. Firstly, the file <path>.<N>.gz
+// is deleted if it exists. Then, if N > 0, for n from N-1 down to 1
+// the file <path>.<n>.gz (if it exists) is renamed to
+// <path>.<n+1>.gz. Next, the contents of <path> up to and including
+// the final newline are gzipped and saved to the file <path>.1.gz
+// . Lastly, the contents of <path> beyond the final newline are
+// copied to the beginning of the file and <path> is truncated to
+// contain just those contents.
 //
 // It is safe to call Write/Close from multiple goroutines.
-func Open(path string, maxLines int, maxFiles int) (io.WriteCloser, error) {
-	if maxLines < 1 {
-		return nil, errors.New("logrot: maxLines < 1")
+func Open(path string, perm os.FileMode, maxSize int64, maxFiles int) (io.WriteCloser, error) {
+	if maxSize < 1 {
+		return nil, errors.New("logrot: maxSize < 1")
 	}
 	if maxFiles < 1 {
 		return nil, errors.New("logrot: maxFiles < 1")
 	}
-	lines := 0
-	file, err := os.Open(path)
+	// if path exists determine size and check path is a regular file.
+	var size int64
+	fi, err := os.Lstat(path)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	if err == nil {
-		// count lines in file
-		r := bufio.NewReader(file)
-		for {
-			_, err := r.ReadSlice('\n')
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				_ = file.Close()
-				return nil, err
-			}
-			lines++
+		if fi.Mode()&os.ModeType != 0 {
+			return nil, fmt.Errorf("logrot: %s is not a regular file", path)
 		}
-		err = file.Close()
-		if err != nil {
-			return nil, err
-		}
+		size = fi.Size()
 	}
-	file, err = os.OpenFile(path, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
+	// open path for reading/writing, creating it if necessary.
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, perm)
 	if err != nil {
 		return nil, err
 	}
+	// determine last newline position within file by reading backwards.
+	var lastNewline int64 = -1
+	bufExp := uint(13) // 8KB buffer
+	buf := make([]byte, 1<<bufExp)
+	off := ((size - 1) >> bufExp) << bufExp
+	bufSz := size - off
+	for off >= 0 {
+		_, err = file.ReadAt(buf[:bufSz], off)
+		if err != nil {
+			_ = file.Close()
+			return nil, err
+		}
+		i := bytes.LastIndexByte(buf[:bufSz], '\n')
+		if i != -1 {
+			lastNewline = off + int64(i)
+			break
+		}
+		off -= 1 << bufExp
+		bufSz = 1 << bufExp
+	}
 	return &writeCloser{
-		path:     path,
-		maxLines: maxLines,
-		maxFiles: maxFiles,
-		file:     file,
-		lines:    lines,
+		path:        path,
+		perm:        perm,
+		maxSize:     maxSize,
+		maxFiles:    maxFiles,
+		file:        file,
+		size:        size,
+		lastNewline: lastNewline,
 	}, nil
 }
