@@ -80,53 +80,71 @@ type writeCloser struct {
 // rotate performs the rotation as described in the comment for
 // Open. It assumes file contains a newline.
 func (wc *writeCloser) rotate() error {
-	// move each gz file up one number
-	err := os.Remove(fmt.Sprintf("%s.%d.gz", wc.path, wc.maxFiles-1))
-	if err != nil && !os.IsNotExist(err) {
-		return err
+	// find highest n such that <path>.<n>.gz exists
+	n := 0
+	for {
+		_, err := os.Lstat(fmt.Sprintf("%s.%d.gz", wc.path, n+1))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err == nil {
+			n++
+		} else {
+			break
+		}
 	}
-	for i := wc.maxFiles - 2; i > 0; i-- {
-		err = os.Rename(
-			fmt.Sprintf("%s.%d.gz", wc.path, i),
-			fmt.Sprintf("%s.%d.gz", wc.path, i+1))
+	// delete expired gz files
+	for ; n > wc.maxFiles-2 && n > 0; n-- {
+		err := os.Remove(fmt.Sprintf("%s.%d.gz", wc.path, n))
+		if err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	// move each gz file up one number
+	for ; n > 0; n-- {
+		err := os.Rename(
+			fmt.Sprintf("%s.%d.gz", wc.path, n),
+			fmt.Sprintf("%s.%d.gz", wc.path, n+1))
 		if err != nil && !os.IsNotExist(err) {
 			return err
 		}
 	}
 	// copy file contents up to last newline to <path>.1.gz
-	w, err := os.OpenFile(
-		fmt.Sprintf("%s.1.gz", wc.path), os.O_WRONLY|os.O_CREATE, wc.perm)
-	if err != nil {
-		return err
-	}
-	gw := gzip.NewWriter(w)
-	err = func() error {
-		// wrap in function literal to ensure gw and w are closed and
-		// flushed before next step
-		defer func() {
-			e := gw.Close()
-			if e != nil {
-				err = e
-			}
-			e = w.Close()
-			if e != nil {
-				err = e
-			}
-		}()
-		_, err = wc.file.Seek(0, 0)
+	if wc.maxFiles > 1 {
+		w, err := os.OpenFile(
+			fmt.Sprintf("%s.1.gz", wc.path), os.O_WRONLY|os.O_CREATE, wc.perm)
 		if err != nil {
 			return err
 		}
-		_, err = io.CopyN(gw, wc.file, wc.lastNewline+1)
-		return err
-	}()
-	if err != nil {
-		return err
+		gw := gzip.NewWriter(w)
+		err = func() error {
+			// wrap in function literal to ensure gw and w are closed and
+			// flushed before next step
+			defer func() {
+				e := gw.Close()
+				if e != nil {
+					err = e
+				}
+				e = w.Close()
+				if e != nil {
+					err = e
+				}
+			}()
+			_, err = wc.file.Seek(0, 0)
+			if err != nil {
+				return err
+			}
+			_, err = io.CopyN(gw, wc.file, wc.lastNewline+1)
+			return err
+		}()
+		if err != nil {
+			return err
+		}
 	}
 	// copy contents beyond last newline to beginning of file
 	sr := io.NewSectionReader(
 		wc.file, wc.lastNewline+1, wc.size-wc.lastNewline-1)
-	_, err = wc.file.Seek(0, 0)
+	_, err := wc.file.Seek(0, 0)
 	if err != nil {
 		return err
 	}
@@ -236,14 +254,15 @@ func (wc *writeCloser) Close() error {
 // rotation. A rotation is the following procedure:
 //
 // If the file <path> contains no newlines then the rotation is a
-// noop. Otherwise let N = maxFiles-1. Firstly, the file <path>.<N>.gz
-// is deleted if it exists. Then, if N > 0, for n from N-1 down to 1
-// the file <path>.<n>.gz (if it exists) is renamed to
-// <path>.<n+1>.gz. Next, the contents of <path> up to and including
-// the final newline are gzipped and saved to the file <path>.1.gz
-// . Lastly, the contents of <path> beyond the final newline are
-// copied to the beginning of the file and <path> is truncated to
-// contain just those contents.
+// noop. Otherwise let N = highest n such that <path>.<n>.gz exists or
+// zero otherwise. Let M = maxFiles. Starting at n = N, while n > M-2
+// and n > 0 delete <path>.<n>.gz and decrement n. Then, while n > 0,
+// rename <path>.<n>.gz to <path>.<n+1>.gz and decrement n. Next, if M
+// > 1, the contents of <path> up to and including the final newline
+// are gzipped and saved to the file <path>.1.gz . Lastly, the
+// contents of <path> beyond the final newline are copied to the
+// beginning of the file and <path> is truncated to contain just those
+// contents.
 //
 // It is safe to call Write/Close from multiple goroutines.
 func Open(path string, perm os.FileMode, maxSize int64, maxFiles int) (io.WriteCloser, error) {
