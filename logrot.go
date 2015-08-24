@@ -209,7 +209,7 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 		if wc.size+int64(br) > wc.maxSize && wc.lastNewline != -1 {
 			// maxSize exceeded and file contains a newline. Only
 			// write data up to max(maxSize,lastNewline+1). Schedule a
-			// rotate following the write.
+			// rotation following the write.
 			max := wc.maxSize
 			if wc.lastNewline+1 > max {
 				max = wc.lastNewline + 1
@@ -252,9 +252,9 @@ func (wc *writeCloser) Close() error {
 //
 // The returned WriteCloser keeps track of the size of the file and
 // the position of the most recent newline. If during a call to Write
-// the next byte written would cause the file size to exceed maxSize
-// bytes then a rotation occurs and writing continues following the
-// rotation. A rotation is the following procedure:
+// a particular byte to be written would cause the file size to exceed
+// maxSize bytes then a rotation occurs before the byte is written. A
+// rotation is the following procedure:
 //
 // If the file <path> contains no newlines then the rotation is a
 // noop. Otherwise let N = highest n such that <path>.<n>.gz exists or
