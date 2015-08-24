@@ -214,16 +214,19 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 			}
 		}
 		rotate := false
-		if wc.size+int64(br) > wc.maxSize && wc.lastNewline != -1 {
-			// maxSize exceeded and file contains a newline. Only
-			// write data up to max(maxSize,lastNewline+1). Schedule a
-			// rotation following the write.
-			max := wc.maxSize
-			if wc.lastNewline+1 > max {
-				max = wc.lastNewline + 1
+		if wc.lastNewline != -1 {
+			max := wc.lastNewline + 1
+			if wc.maxSize > max {
+				max = wc.maxSize
 			}
-			br = int(max - wc.size)
-			rotate = true
+			if wc.size+int64(br) > max {
+				// file data + data to be written contains a newline
+				// and exceeds max(maxSize,lastNewline+1) in
+				// size. Reduce write down to this limit and schedule
+				// a rotation following the write.
+				br = int(max - wc.size)
+				rotate = true
+			}
 		}
 		var n int
 		n, err = wc.file.WriteAt(p[:br], wc.size)
