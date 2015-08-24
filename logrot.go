@@ -20,8 +20,8 @@
 */
 
 // Package logrot implements a file writer with log rotation and gzip
-// compression. The rotation and compression is handled as needed
-// during calls to Write.
+// compression. The rotation and compression are handled as needed
+// during write operations.
 //
 // Note: The API is presently experimental and may change.
 //
