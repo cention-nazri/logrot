@@ -192,8 +192,8 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 	if wc.closed {
 		return 0, errors.New("logrot: WriteCloser is closed")
 	}
-	var bw int = 0 // total bytes written
-	var br int = 0 // bytes read from p in each loop iteration
+	bw := 0 // total bytes written
+	br := 0 // bytes read from p in each loop iteration
 	for ; len(p) > 0; p, br = p[br:], 0 {
 		// advance br a line at a time until we reach end of buffer or
 		// br+wc.size advances past wc.maxSize
