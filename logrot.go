@@ -24,6 +24,34 @@
 // takes care of rotation and compression as needed.
 //
 // Note: The API is presently experimental and may change.
+//
+// Example
+//
+// Suppose you have a log file that looks like this:
+//
+//   -rw------- 1 user user  876543 Aug 24 02:41 logfile
+//
+// and you open it with Open specifying a maxSize parameter of 1000000
+// bytes and a maxFiles parameter of 3. If you write a further 1000000
+// bytes logrot will perform a rotation during the write and you'll be
+// left with something like this:
+//
+//   -rw------- 1 user user  876564 Aug 24 02:44 logfile
+//   -rw------- 1 user user  115460 Aug 24 02:44 logfile.1.gz
+//
+// Write a further 500000 bytes and you'll get this:
+//
+//   -rw------- 1 user user  376585 Aug 24 02:45 logfile
+//   -rw------- 1 user user  111956 Aug 24 02:45 logfile.1.gz
+//   -rw------- 1 user user  115460 Aug 24 02:44 logfile.2.gz
+//
+// Lastly, writing a further 1000000 bytes gives:
+//
+//   -rw------- 1 user user  376617 Aug 24 02:45 logfile
+//   -rw------- 1 user user  122492 Aug 24 02:45 logfile.1.gz
+//   -rw------- 1 user user  111956 Aug 24 02:45 logfile.2.gz
+//
+// There is no logfile.3.gz created since maxFiles is 3.
 package logrot // import "xi2.org/x/logrot"
 
 import (
