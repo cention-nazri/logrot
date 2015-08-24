@@ -264,19 +264,18 @@ func (wc *writeCloser) Close() error {
 // The returned WriteCloser keeps track of the size of the file and
 // the position of the most recent newline. If during a call to Write
 // a particular byte to be written would cause the file size to exceed
-// maxSize bytes then a rotation occurs before the byte is written. A
+// maxSize bytes and at least one newline has been written to the file
+// already then a rotation occurs before the byte is written. A
 // rotation is the following procedure:
 //
-// If the file <path> contains no newlines then the rotation is a
-// noop. Otherwise let N = highest n such that <path>.<n>.gz exists or
-// zero otherwise. Let M = maxFiles. Starting at n = N, while n > M-2
-// and n > 0 delete <path>.<n>.gz and decrement n. Then, while n > 0,
-// rename <path>.<n>.gz to <path>.<n+1>.gz and decrement n. Next, if M
-// > 1, the contents of <path> up to and including the final newline
-// are gzipped and saved to the file <path>.1.gz . Lastly, the
-// contents of <path> beyond the final newline are copied to the
-// beginning of the file and <path> is truncated to contain just those
-// contents.
+// Let N = highest n such that <path>.<n>.gz exists or zero
+// otherwise. Let M = maxFiles. Starting at n = N, while n > M-2 and n
+// > 0 delete <path>.<n>.gz and decrement n. Then, while n > 0, rename
+// <path>.<n>.gz to <path>.<n+1>.gz and decrement n. Next, if M > 1,
+// the contents of <path> up to and including the final newline are
+// gzipped and saved to the file <path>.1.gz . Lastly, the contents of
+// <path> beyond the final newline are copied to the beginning of the
+// file and <path> is truncated to contain just those contents.
 //
 // It is safe to call Write/Close from multiple goroutines.
 func Open(path string, perm os.FileMode, maxSize int64, maxFiles int) (io.WriteCloser, error) {
