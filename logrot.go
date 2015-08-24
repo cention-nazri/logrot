@@ -56,13 +56,13 @@
 //
 // There is no logfile.3.gz created since maxFiles is 3.
 //
-// In the example presented here, as is typical, logfile.1.gz and
-// logfile.2.gz will be equal to or just under maxSize bytes when
-// decompressed. There is once unusual case where you will end up with
-// files greater than maxSize which is if you write more than maxSize
-// bytes without a newline. Logrot only splits files at newlines so in
-// this case it allows the log file to grow larger and then splits it
-// when a newline is finally written.
+// In the example presented here, as is typical for normal log files,
+// logfile.1.gz and logfile.2.gz will be equal to or just under
+// maxSize bytes when decompressed. There is one unusual case where
+// you will end up with files greater than maxSize which is if you
+// write more than maxSize bytes without a newline. Logrot only splits
+// files at newlines so in this case it allows the log file to grow
+// larger and then splits it when/if a newline is finally written.
 package logrot // import "xi2.org/x/logrot"
 
 import (
