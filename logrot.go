@@ -20,8 +20,8 @@
 */
 
 // Package logrot implements a file writer with log rotation and gzip
-// compression. It enables creation of an io.WriteCloser which, when
-// written to, takes care of rotation and compression as needed.
+// compression. The rotation and compression is handled as needed
+// during calls to Write.
 //
 // Note: The API is presently experimental and may change.
 //
