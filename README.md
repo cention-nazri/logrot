@@ -1,6 +1,6 @@
 # Logrot
 
-Package logrot implements a file writer with log rotation and gzip
+Package logrot implements a log file writer with rotation and gzip
 compression. The rotation and compression are handled as needed during write
 operations.
 
