@@ -1,8 +1,8 @@
 # Logrot
 
 Package logrot implements a file writer with log rotation and gzip
-compression. It provides an io.WriteCloser which, when written to, takes
-care of rotation and compression as needed.
+compression. It enables creation of an io.WriteCloser which, when written
+to, takes care of rotation and compression as needed.
 
 Documentation at <https://godoc.org/xi2.org/x/logrot>.
 
