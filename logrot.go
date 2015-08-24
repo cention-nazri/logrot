@@ -264,8 +264,8 @@ func (wc *writeCloser) Close() error {
 // The returned WriteCloser keeps track of the size of the file and
 // the position of the most recent newline. If during a call to Write
 // a particular byte to be written would cause the file size to exceed
-// maxSize bytes and at least one newline has been written to the file
-// already then a rotation occurs before the byte is written. A
+// maxSize bytes, and at least one newline has been written to the
+// file already, then a rotation occurs before the byte is written. A
 // rotation is the following procedure:
 //
 // Let N = highest n such that <path>.<n>.gz exists or zero
