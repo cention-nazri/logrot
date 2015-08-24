@@ -166,8 +166,8 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 	var bw int = 0 // total bytes written
 	var br int = 0 // bytes read from p in each loop iteration
 	for ; len(p) > 0; p, br = p[br:], 0 {
-		// advance br a line at a time until either end of buffer, a newline
-		// is reached or br+wc.size advances past wc.maxSize
+		// advance br a line at a time until we reach end of buffer or
+		// br+wc.size advances past wc.maxSize
 		for {
 			i := bytes.IndexByte(p[br:], '\n')
 			if i == -1 {
