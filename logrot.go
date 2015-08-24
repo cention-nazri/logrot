@@ -36,7 +36,7 @@
 //
 //   w, err := logrot.Open("logfile", 0600, 1000000, 3)
 //
-// If you write a further 1000000 bytes logrot will perform a rotation
+// If you write a further 1000000 bytes Logrot will perform a rotation
 // during the write and you'll be left with something like this:
 //
 //   -rw------- 1 user user  876564 Aug 24 02:44 logfile
@@ -55,6 +55,14 @@
 //   -rw------- 1 user user  111956 Aug 24 02:45 logfile.2.gz
 //
 // There is no logfile.3.gz created since maxFiles is 3.
+//
+// In this case, as is typical, logfile.1.gz and logfile.2.gz will be
+// equal to or just under maxSize bytes when decompressed. There is
+// once unusual case where you will end up with files greater than
+// maxSize which is if you write more than maxSize bytes without a
+// newline. Logrot only splits files at newlines so in this case it
+// allows the log file to grow larger and then splits it when a
+// newline is finally written.
 package logrot // import "xi2.org/x/logrot"
 
 import (
