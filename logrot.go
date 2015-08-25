@@ -304,7 +304,7 @@ func Open(path string, perm os.FileMode, maxSize int64, maxFiles int) (io.WriteC
 	}
 	// determine last newline position within file by reading backwards.
 	var lastNewline int64 = -1
-	bufExp := uint(13) // 8KB buffer
+	const bufExp = 13 // 8KB buffer
 	buf := make([]byte, 1<<bufExp)
 	off := ((size - 1) >> bufExp) << bufExp
 	bufSz := size - off
