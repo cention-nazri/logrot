@@ -63,6 +63,17 @@
 // write more than maxSize bytes without a newline. Logrot only splits
 // files at newlines so in this case it allows the log file to grow
 // larger and then splits it when/if a newline is finally written.
+//
+// Use with the standard library log package
+//
+// To use logrot with the standard library log package, simply pass
+// the result of Open to log.SetOutput:
+//
+//   w, err := logrot.Open("logfile", 0600, 1000000, 3)
+//   if err != nil {
+//       panic(err)
+//   }
+//   log.SetOutput(w)
 package logrot // import "xi2.org/x/logrot"
 
 import (
