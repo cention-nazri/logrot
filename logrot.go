@@ -96,7 +96,7 @@ type writeCloser struct {
 	lastNewline int64
 	closed      bool
 	writeErr    error
-	mutex       sync.Mutex
+	mu          sync.Mutex
 }
 
 // rotate performs the rotation as described in the comment for
@@ -186,8 +186,8 @@ func (wc *writeCloser) rotate() error {
 }
 
 func (wc *writeCloser) Write(p []byte) (_ int, err error) {
-	wc.mutex.Lock()
-	defer wc.mutex.Unlock()
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
 	if wc.writeErr != nil {
 		// If Write returns an error once, any subsequent calls
 		// fail. To continue writing one must create a new WriteCloser
@@ -257,8 +257,8 @@ func (wc *writeCloser) Write(p []byte) (_ int, err error) {
 }
 
 func (wc *writeCloser) Close() error {
-	wc.mutex.Lock()
-	defer wc.mutex.Unlock()
+	wc.mu.Lock()
+	defer wc.mu.Unlock()
 	if !wc.closed {
 		err := wc.file.Close()
 		if err != nil {
